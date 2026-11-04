@@ -7,6 +7,9 @@ services:
 
     container_name: try-find-me-backend
 
+    networks:
+      - app-network
+
     env_file:
       - ./backend/.env
 
@@ -24,3 +27,8 @@ services:
       - --port
       - "8000"
       - --reload
+
+networks:
+  app-network:
+    name: try-find-me-network
+    driver: bridge
