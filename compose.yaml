@@ -7,6 +7,9 @@ services:
 
     container_name: try-find-me-backend
 
+    env_file:
+      - ./backend/.env
+
     ports:
       - "127.0.0.1:8000:8000"
 

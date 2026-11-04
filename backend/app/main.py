@@ -3,11 +3,12 @@
 from fastapi import FastAPI
 
 from app.api.routes.audits import router as audits_router
+from app.core.config import settings
 
 app = FastAPI(
-    title="Try Find Me! — OSINT",
+    title=settings.APP_NAME,
     description="Authorized Digital Exposure Assessment Platform",
-    version="0.1.1",
+    version="0.2.0",
 )
 
 

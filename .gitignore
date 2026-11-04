@@ -12,6 +12,8 @@ __pycache__/
 
 # Environment variables
 .env
+.env.*
+!.env.example
 
 # Frontend
 node_modules/
@@ -19,3 +21,6 @@ dist/
 
 # IDE
 .vscode/
+
+# Docker
+*.log
