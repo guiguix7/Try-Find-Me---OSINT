@@ -1,7 +1,9 @@
-from app.services.audit_service import create_audit, get_audit
+# API Routes for Audits
+
 from fastapi import APIRouter, HTTPException, status
 
 from app.schemas.audit import AuditCreate
+from app.services.audit_service import create_audit, get_audit
 
 router = APIRouter(prefix="/audits", tags=["Audits"])
 

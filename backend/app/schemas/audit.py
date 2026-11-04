@@ -1,3 +1,5 @@
+# Schema for creating an audit
+
 import ipaddress
 import re
 from typing import Literal
