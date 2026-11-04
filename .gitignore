@@ -1,0 +1,21 @@
+# Ignore IDE files
+IDEIA.md
+*.swp
+*.swo
+*.swn
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Environment variables
+.env
+
+# Frontend
+node_modules/
+dist/
+
+# IDE
+.vscode/
