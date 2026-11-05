@@ -5,6 +5,9 @@ IDEIA.md
 *.swn
 /skills/
 /agents/
+FASE1.md
+.opencode/
+/.opencode/
 
 # Python
 __pycache__/
@@ -17,7 +20,6 @@ __pycache__/
 coverage.xml
 htmlcov/
 .tox/
-FASE1.md
 
 # Environment variables
 .env

@@ -1,64 +1,104 @@
+// API service layer for Try Find Me! frontend.
+// All calls go to the backend API. Values from the API are treated as
+// untrusted and are escaped before rendering (see components).
 
-const API_BASE_URL = 'http://127.0.0.1:8000'
+import type {
+    DomainChallengeRequest,
+    DomainChallengeResponse,
+    DomainVerifyRequest,
+    DomainVerifyResponse,
+    AssessmentRequest,
+    Report,
+    SourceInfo,
+    HealthResponse,
+    ErrorResponse,
+} from '../types/api';
 
-export interface HealthResponse {
-    status: string
-}
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000';
 
-export interface AuditCreate {
-    target: string
-    asset_type: 'domain'
-    authorization_confirmed: boolean
-}
+class ApiError extends Error {
+    status: number;
+    requestId?: string;
 
-export interface AuditResponse {
-    id: string
-    target: string
-    asset_type: string
-    status: string
-    created_at: string
-    mode: string
+    constructor(message: string, status: number, requestId?: string) {
+        super(message);
+        this.name = 'ApiError';
+        this.status = status;
+        this.requestId = requestId;
+    }
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
     if (!response.ok) {
-        const errorData = await response.json().catch(() => null)
-        const message =
-            typeof errorData?.detail === 'string'
-                ? errorData.detail
-                : `API request failed: ${response.status}`
+        let errorData: ErrorResponse | null = null;
+        try {
+            errorData = (await response.json()) as ErrorResponse;
+        } catch {
+            // Ignore JSON parse errors on error responses
+        }
 
-        throw new Error(message)
+        const message =
+            errorData?.message ??
+            errorData?.error ??
+            `API request failed: ${response.status}`;
+
+        throw new ApiError(message, response.status, errorData?.request_id);
     }
 
-    return response.json() as Promise<T>
+    return (await response.json()) as T;
 }
 
 export async function getHealth(): Promise<HealthResponse> {
-    const response = await fetch(`${API_BASE_URL}/health`)
-    return handleResponse<HealthResponse>(response)
+    const response = await fetch(`${API_BASE_URL}/health`, {
+        headers: { 'Content-Type': 'application/json' },
+    });
+    return handleResponse<HealthResponse>(response);
 }
 
-export async function createAudit(
-    data: AuditCreate,
-): Promise<AuditResponse> {
-    const response = await fetch(`${API_BASE_URL}/api/v1/audits/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-    })
-
-    return handleResponse<AuditResponse>(response)
-}
-
-export async function getAudit(
-    auditId: string,
-): Promise<AuditResponse> {
+export async function createDomainChallenge(
+    data: DomainChallengeRequest,
+): Promise<DomainChallengeResponse> {
     const response = await fetch(
-        `${API_BASE_URL}/api/v1/audits/${encodeURIComponent(auditId)}`,
-    )
-
-    return handleResponse<AuditResponse>(response)
+        `${API_BASE_URL}/api/v1/ownership/domain/challenge`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        },
+    );
+    return handleResponse<DomainChallengeResponse>(response);
 }
+
+export async function verifyDomainOwnership(
+    data: DomainVerifyRequest,
+): Promise<DomainVerifyResponse> {
+    const response = await fetch(
+        `${API_BASE_URL}/api/v1/ownership/domain/verify`,
+        {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data),
+        },
+    );
+    return handleResponse<DomainVerifyResponse>(response);
+}
+
+export async function listSources(): Promise<SourceInfo[]> {
+    const response = await fetch(`${API_BASE_URL}/api/v1/sources`, {
+        headers: { 'Content-Type': 'application/json' },
+    });
+    return handleResponse<SourceInfo[]>(response);
+}
+
+export async function runAssessment(
+    data: AssessmentRequest,
+): Promise<Report> {
+    const response = await fetch(`${API_BASE_URL}/api/v1/assessments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+    });
+    return handleResponse<Report>(response);
+}
+
+export { ApiError };

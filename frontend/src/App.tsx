@@ -1,139 +1,82 @@
-
-import { useState, type FormEvent } from 'react'
-import {
-  createAudit,
-  getAudit,
-} from './services/api'
-import type { AuditResponse } from './services/api'
-import './App.css'
+import { useAssessment } from './hooks/useAssessment';
+import { DomainInput } from './components/DomainInput';
+import { OwnershipChallenge } from './components/OwnershipChallenge';
+import { SourcesTransparency } from './components/SourcesTransparency';
+import { AssessmentLoading } from './components/AssessmentLoading';
+import { ReportView } from './components/ReportView';
+import { ErrorState } from './components/ErrorState';
+import './App.css';
 
 function App() {
-  const [target, setTarget] = useState('')
-  const [authorizationConfirmed, setAuthorizationConfirmed] =
-    useState(false)
+    const {
+        state,
+        token,
+        setDomain,
+        setAuthorizationConfirmed,
+        setTokenValue,
+        startChallenge,
+        verifyOwnership,
+        goBackToChallenge,
+        confirmSources,
+        reset,
+    } = useAssessment();
 
-  const [audit, setAudit] = useState<AuditResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [message, setMessage] = useState<string | null>(null)
+    return (
+        <main>
+            <h1>Try Find Me! — OSINT</h1>
 
-  async function handleCreateAudit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
+            {state.step === 'idle' && (
+                <DomainInput
+                    domain={state.domain}
+                    onDomainChange={setDomain}
+                    authorizationConfirmed={state.authorizationConfirmed}
+                    onAuthorizationChange={setAuthorizationConfirmed}
+                    onSubmit={startChallenge}
+                    loading={state.loading}
+                    error={state.error}
+                />
+            )}
 
-    setLoading(true)
-    setError(null)
-    setMessage(null)
-    setAudit(null)
+            {state.step === 'challenge' && state.challenge && (
+                <OwnershipChallenge
+                    challenge={state.challenge}
+                    onVerify={verifyOwnership}
+                    onBack={goBackToChallenge}
+                    token={token}
+                    onTokenChange={setTokenValue}
+                    loading={state.loading}
+                    error={state.error}
+                />
+            )}
 
-    try {
-      const result = await createAudit({
-        target: target.trim(),
-        asset_type: 'domain',
-        authorization_confirmed: authorizationConfirmed,
-      })
+            {state.step === 'sources' && (
+                <SourcesTransparency
+                    sources={state.sources}
+                    confirmed={false}
+                    onConfirmChange={() => {}}
+                    onConfirm={confirmSources}
+                    loading={state.loading}
+                />
+            )}
 
-      setAudit(result)
-      setMessage('Audit created successfully.')
-    } catch (error: unknown) {
-      setError(
-        error instanceof Error ? error.message : 'Unknown error occurred.',
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
+            {state.step === 'assessing' && (
+                <AssessmentLoading moduleStatuses={[]} />
+            )}
 
-  async function handleGetAudit() {
-    if (!audit) return
+            {state.step === 'complete' && state.report && (
+                <ReportView report={state.report} onDiscard={reset} />
+            )}
 
-    setLoading(true)
-    setError(null)
-    setMessage(null)
-
-    try {
-      const result = await getAudit(audit.id)
-
-      setAudit(result)
-      setMessage('Audit retrieved successfully.')
-    } catch (error: unknown) {
-      setError(
-        error instanceof Error ? error.message : 'Unknown error occurred.',
-      )
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <main>
-      <h1>Try Find Me! — OSINT</h1>
-
-      <section>
-        <h2>Create an audit</h2>
-
-        <form onSubmit={handleCreateAudit}>
-          <div>
-            <label htmlFor="target">Domain</label>
-
-            <input
-              id="target"
-              type="text"
-              placeholder="example.com"
-              value={target}
-              onChange={(event) => setTarget(event.target.value)}
-              required
-              minLength={4}
-              maxLength={253}
-            />
-          </div>
-
-          <div>
-            <label>
-              <input
-                type="checkbox"
-                checked={authorizationConfirmed}
-                onChange={(event) =>
-                  setAuthorizationConfirmed(event.target.checked)
-                }
-                required
-              />
-              I confirm that I own this domain or have explicit authorization
-              to audit it.
-            </label>
-          </div>
-
-          <button type="submit" disabled={loading}>
-            {loading ? 'Processing...' : 'Start audit'}
-          </button>
-        </form>
-      </section>
-
-      {message && <p role="status">{message}</p>}
-
-      {error && <p role="alert">Error: {error}</p>}
-
-      {audit && (
-        <section>
-          <h2>Audit details</h2>
-
-          <p><strong>ID:</strong> {audit.id}</p>
-          <p><strong>Target:</strong> {audit.target}</p>
-          <p><strong>Asset type:</strong> {audit.asset_type}</p>
-          <p><strong>Status:</strong> {audit.status}</p>
-          <p><strong>Mode:</strong> {audit.mode}</p>
-          <p><strong>Created at:</strong> {audit.created_at}</p>
-
-          <button
-            type="button"
-            onClick={handleGetAudit}
-            disabled={loading}
-          >
-            Refresh audit
-          </button>
-        </section>
-      )}
-    </main>
-  )
+            {state.step === 'error' && (
+                <ErrorState
+                    step={state.step}
+                    error={state.error}
+                    errorStatus={state.errorStatus}
+                    onRetry={reset}
+                />
+            )}
+        </main>
+    );
 }
 
-export default App
+export default App;
