@@ -1,6 +1,6 @@
 // API service layer for Try Find Me! frontend.
 // All calls go to the backend API. Values from the API are treated as
-// untrusted and are escaped before rendering (see components).
+// untrusted and rendered as text by React; never injected as HTML.
 
 import type {
     DomainChallengeRequest,
@@ -19,13 +19,27 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://127.0.0.1:8000
 class ApiError extends Error {
     status: number;
     requestId?: string;
+    retryAfterSeconds?: number;
 
-    constructor(message: string, status: number, requestId?: string) {
+    constructor(
+        message: string,
+        status: number,
+        requestId?: string,
+        retryAfterSeconds?: number,
+    ) {
         super(message);
         this.name = 'ApiError';
         this.status = status;
         this.requestId = requestId;
+        this.retryAfterSeconds = retryAfterSeconds;
     }
+}
+
+function parseRetryAfter(response: Response): number | undefined {
+    const raw = response.headers.get('retry-after');
+    if (!raw) return undefined;
+    const seconds = Number.parseInt(raw, 10);
+    return Number.isFinite(seconds) && seconds > 0 ? seconds : undefined;
 }
 
 async function handleResponse<T>(response: Response): Promise<T> {
@@ -42,7 +56,12 @@ async function handleResponse<T>(response: Response): Promise<T> {
             errorData?.error ??
             `API request failed: ${response.status}`;
 
-        throw new ApiError(message, response.status, errorData?.request_id);
+        throw new ApiError(
+            message,
+            response.status,
+            errorData?.request_id,
+            parseRetryAfter(response),
+        );
     }
 
     return (await response.json()) as T;

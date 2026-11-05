@@ -1,117 +1,185 @@
-interface SourceItemProps {
-    source: {
-        module_id: string;
-        source_name: string;
-        source_url?: string;
-        data_sent: string;
-        purpose: string;
-        reliability: 'low' | 'medium' | 'high';
-        auth_required: boolean;
-    };
-}
-
-export function SourceItem({ source }: SourceItemProps) {
-    return (
-        <div className="source-item" role="listitem">
-            <div className="source-header">
-                <h4>{escapeHtml(source.source_name)}</h4>
-                <span className={`reliability reliability-${source.reliability}`}>
-                    Reliability: {source.reliability}
-                </span>
-            </div>
-            <p className="source-purpose">{escapeHtml(source.purpose)}</p>
-            <p className="source-data">
-                <strong>Data sent:</strong> {escapeHtml(source.data_sent)}
-            </p>
-            {source.source_url && (
-                <p className="source-url">
-                    <strong>Source:</strong>
-                    <a href={source.source_url} target="_blank" rel="noopener noreferrer">
-                        {escapeHtml(source.source_url)}
-                    </a>
-                </p>
-            )}
-        </div>
-    );
-}
+import type { AssessmentError } from '../hooks/useAssessment';
+import type { SourceInfo } from '../types/api';
+import { safeHttpUrl } from '../lib/format';
+import { FlowError } from './FlowError';
+import {
+    Badge,
+    Button,
+    Checkbox,
+    EmptyState,
+    Panel,
+} from './ui';
+import type { BadgeTone } from './ui';
 
 interface SourcesTransparencyProps {
-    sources: {
-        module_id: string;
-        source_name: string;
-        source_url?: string;
-        data_sent: string;
-        purpose: string;
-        reliability: 'low' | 'medium' | 'high';
-        auth_required: boolean;
-    }[];
-    confirmed: boolean;
-    onConfirmChange: (checked: boolean) => void;
+    sources: SourceInfo[];
+    consentConfirmed: boolean;
+    onConsentChange: (checked: boolean) => void;
     onConfirm: () => void;
+    onBack: () => void;
     loading: boolean;
+    error: AssessmentError | null;
+    onRetry: () => void;
+    onRestartVerification: () => void;
+    onStartOver: () => void;
+    domain: string;
+}
+
+function reliabilityTone(
+    reliability: SourceInfo['reliability'],
+): BadgeTone {
+    if (reliability === 'high') return 'success';
+    if (reliability === 'medium') return 'warning';
+    return 'neutral';
 }
 
 export function SourcesTransparency({
     sources,
-    confirmed,
-    onConfirmChange,
+    consentConfirmed,
+    onConsentChange,
     onConfirm,
+    onBack,
     loading,
+    error,
+    onRetry,
+    onRestartVerification,
+    onStartOver,
+    domain,
 }: SourcesTransparencyProps) {
+    const sourcesUnavailable = error?.context === 'sources';
+    const blocked = sources.length === 0 || sourcesUnavailable;
+
     return (
-        <section aria-labelledby="sources-heading" className="card">
-            <h2 id="sources-heading">External services that will be contacted</h2>
-
-            <p className="description">
-                Before starting the assessment, you should know which external
-                public services will receive your domain information, what data
-                is sent, and why. These services operate under their own privacy
-                policies and may independently log requests.
-            </p>
-
-            <ul role="list" className="source-list">
-                {sources.map((source, index) => (
-                    <SourceItem key={index} source={source} />
-                ))}
-            </ul>
-
-            <p className="notice">
-                <strong>Transparency notice:</strong> Running this assessment
-                sends your domain name to the public services listed above. The
-                application does not store your domain or results, but external
-                services may log requests under their own policies.
-            </p>
-
-            <div className="form-group authorization">
-                <label>
-                    <input
-                        type="checkbox"
-                        checked={confirmed}
-                        onChange={(e) => onConfirmChange(e.target.checked)}
-                        required
-                        disabled={loading}
-                    />
-                    <span>
-                        I understand and consent to my domain being sent to the
-                        external services listed above.
-                    </span>
-                </label>
+        <div className="stack stack--loose">
+            <div className="page-intro">
+                <span className="eyebrow">Step 3 · Sources &amp; consent</span>
+                <h1>Review who will receive {domain}</h1>
+                <p>
+                    The assessment uses only allowlisted passive sources. The
+                    domain you verified is transmitted to each service below.
+                    These services may log requests independently under their
+                    own policies.
+                </p>
             </div>
 
-            <button
-                type="button"
-                onClick={onConfirm}
-                disabled={loading || !confirmed}
-                className="button button-primary"
-            >
-                {loading ? 'Starting assessment…' : 'Start passive assessment'}
-            </button>
-        </section>
-    );
-}
+            {sourcesUnavailable ? (
+                <FlowError
+                    error={error}
+                    onRetry={onRetry}
+                    onRestartVerification={onRestartVerification}
+                    onStartOver={onStartOver}
+                />
+            ) : null}
 
-function escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
+            {sources.length === 0 && !sourcesUnavailable ? (
+                <Panel>
+                    <EmptyState
+                        icon="globe"
+                        title="No external sources were returned"
+                    >
+                        The backend did not return a source list. The assessment
+                        cannot start without a transparent list of the services
+                        that will receive the domain.
+                    </EmptyState>
+                </Panel>
+            ) : null}
+
+            {sources.length > 0 ? (
+                <div className="stack">
+                    {sources.map((source) => {
+                        const docsUrl = safeHttpUrl(source.source_url);
+                        return (
+                        <section className="source-card" key={source.module_id}>
+                            <div className="source-card__header">
+                                <span className="source-card__name">
+                                    {source.source_name}
+                                </span>
+                                <div className="cluster">
+                                    <Badge
+                                        tone={reliabilityTone(
+                                            source.reliability,
+                                        )}
+                                    >
+                                        {source.reliability} reliability
+                                    </Badge>
+                                    <Badge tone="neutral">
+                                        {source.auth_required
+                                            ? 'Authentication required'
+                                            : 'No authentication'}
+                                    </Badge>
+                                </div>
+                            </div>
+                            <div className="source-card__body">
+                                <span className="source-card__term">
+                                    Purpose
+                                </span>
+                                <span className="source-card__desc">
+                                    {source.purpose}
+                                </span>
+                                <span className="source-card__term">
+                                    Data sent
+                                </span>
+                                <span className="source-card__desc">
+                                    {source.data_sent}
+                                </span>
+                            </div>
+                            {docsUrl ? (
+                                <a
+                                    className="source-card__link"
+                                    href={docsUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                >
+                                    Open source documentation
+                                    <span className="sr-only">
+                                        {' '}
+                                        (opens in a new tab)
+                                    </span>
+                                </a>
+                            ) : null}
+                        </section>
+                        );
+                    })}
+                </div>
+            ) : null}
+
+            <Panel eyebrow="Consent" title="Confirm before running">
+                <div className="stack">
+                    <div role="group" aria-label="Consent confirmation">
+                        <Checkbox
+                            checked={consentConfirmed}
+                            onChange={onConsentChange}
+                            label="I understand these third-party services will receive my domain and may log requests under their own policies."
+                            description="This consent is required before the assessment starts. The platform does not send the domain anywhere until you confirm."
+                            disabled={blocked || loading}
+                        />
+                    </div>
+
+                    <div className="cluster">
+                        <Button
+                            variant="primary"
+                            icon="search"
+                            onClick={onConfirm}
+                            loading={loading}
+                            disabled={!consentConfirmed || blocked || loading}
+                        >
+                            Run passive assessment
+                        </Button>
+                        <Button variant="ghost" onClick={onBack}>
+                            Back to verification
+                        </Button>
+                    </div>
+                </div>
+            </Panel>
+
+            {error?.context === 'assessment' ? (
+                <FlowError
+                    error={error}
+                    onRetry={onRetry}
+                    onRestartVerification={onRestartVerification}
+                    onStartOver={onStartOver}
+                />
+            ) : null}
+        </div>
+    );
 }

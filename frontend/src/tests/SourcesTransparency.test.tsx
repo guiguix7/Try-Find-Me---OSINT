@@ -23,101 +23,172 @@ const mockSources = [
   },
 ]
 
+function renderSources(
+  overrides: Partial<Parameters<typeof SourcesTransparency>[0]> = {},
+) {
+  const props = {
+    sources: mockSources,
+    consentConfirmed: false,
+    onConsentChange: vi.fn(),
+    onConfirm: vi.fn(),
+    onBack: vi.fn(),
+    loading: false,
+    error: null,
+    onRetry: vi.fn(),
+    onRestartVerification: vi.fn(),
+    onStartOver: vi.fn(),
+    domain: 'example.com',
+    ...overrides,
+  }
+  render(<SourcesTransparency {...props} />)
+  return props
+}
+
 describe('SourcesTransparency', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
-  it('renders source list with names and purposes', () => {
-    render(
-      <SourcesTransparency
-        sources={mockSources}
-        confirmed={false}
-        onConfirmChange={vi.fn()}
-        onConfirm={vi.fn()}
-        loading={false}
-      />
-    )
+  it('lists every external source with purpose and data sent', () => {
+    renderSources()
 
-    expect(screen.getByText(/external services that will be contacted/i)).toBeInTheDocument()
-    const crtShHeadings = screen.getAllByText(/crt\.sh/i)
-    expect(crtShHeadings.length).toBeGreaterThan(0)
-    const publicDnsTexts = screen.getAllByText(/public dns/i)
-    expect(publicDnsTexts.length).toBeGreaterThan(0)
+    expect(
+      screen.getByRole('heading', { name: /review who will receive example\.com/i }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('crt.sh')).toBeInTheDocument()
+    expect(screen.getByText('Public DNS')).toBeInTheDocument()
+    expect(screen.getByText(/passive subdomain discovery/i)).toBeInTheDocument()
+    expect(
+      screen.getByText(/domain name \(for dns record queries\)/i),
+    ).toBeInTheDocument()
   })
 
-  it('shows reliability badge for each source', () => {
-    render(
-      <SourcesTransparency
-        sources={mockSources}
-        confirmed={false}
-        onConfirmChange={vi.fn()}
-        onConfirm={vi.fn()}
-        loading={false}
-      />
-    )
+  it('shows reliability and authentication badges', () => {
+    renderSources()
 
-    expect(screen.getByText(/reliability: medium/i)).toBeInTheDocument()
-    expect(screen.getByText(/reliability: high/i)).toBeInTheDocument()
+    expect(screen.getByText(/medium reliability/i)).toBeInTheDocument()
+    expect(screen.getByText(/high reliability/i)).toBeInTheDocument()
+    expect(screen.getAllByText(/no authentication/i)).toHaveLength(2)
   })
 
-  it('shows transparency notice', () => {
-    render(
-      <SourcesTransparency
-        sources={mockSources}
-        confirmed={false}
-        onConfirmChange={vi.fn()}
-        onConfirm={vi.fn()}
-        loading={false}
-      />
-    )
+  it('links to source documentation in a new tab', () => {
+    renderSources()
 
-    expect(screen.getByText(/transparency notice/i)).toBeInTheDocument()
+    const [link] = screen.getAllByRole('link', {
+      name: /open source documentation/i,
+    })
+    expect(link).toHaveAttribute('href', 'https://crt.sh/')
+    expect(link).toHaveAttribute('target', '_blank')
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer')
   })
 
-  it('calls onConfirm when confirm button is clicked', () => {
-    const onConfirm = vi.fn()
-    render(
-      <SourcesTransparency
-        sources={mockSources}
-        confirmed={true}
-        onConfirmChange={vi.fn()}
-        onConfirm={onConfirm}
-        loading={false}
-      />
-    )
+  it('requires explicit consent before running the assessment', () => {
+    const props = renderSources()
 
-    const button = screen.getByRole('button', { name: /start passive assessment/i })
-    fireEvent.click(button)
-    expect(onConfirm).toHaveBeenCalledTimes(1)
+    const consent = screen.getByLabelText(/i understand these third-party services/i)
+    const run = screen.getByRole('button', { name: /run passive assessment/i })
+
+    expect(consent).not.toBeChecked()
+    expect(run).toBeDisabled()
+
+    fireEvent.click(consent)
+    expect(props.onConsentChange).toHaveBeenCalledWith(true)
   })
 
-  it('disables confirm button when not confirmed', () => {
-    render(
-      <SourcesTransparency
-        sources={mockSources}
-        confirmed={false}
-        onConfirmChange={vi.fn()}
-        onConfirm={vi.fn()}
-        loading={false}
-      />
-    )
+  it('enables the assessment once consent is confirmed', () => {
+    const props = renderSources({ consentConfirmed: true })
 
-    const button = screen.getByRole('button', { name: /start passive assessment/i })
-    expect(button).toBeDisabled()
+    const run = screen.getByRole('button', { name: /run passive assessment/i })
+    expect(run).toBeEnabled()
+
+    fireEvent.click(run)
+    expect(props.onConfirm).toHaveBeenCalledTimes(1)
   })
 
-  it('displays consent checkbox', () => {
-    render(
-      <SourcesTransparency
-        sources={mockSources}
-        confirmed={false}
-        onConfirmChange={vi.fn()}
-        onConfirm={vi.fn()}
-        loading={false}
-      />
-    )
+  it('can go back to verification', () => {
+    const props = renderSources()
 
-    expect(screen.getByLabelText(/i understand and consent/i)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /back to verification/i }))
+    expect(props.onBack).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks the assessment when the source registry fails', () => {
+    const props = renderSources({
+      sources: [],
+      error: {
+        message: 'The source registry is offline.',
+        context: 'sources',
+        status: 503,
+        retryAfterSeconds: null,
+      },
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /external source list unavailable/i,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /the source registry is offline/i,
+    )
+    expect(
+      screen.getByLabelText(/i understand these third-party services/i),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole('button', { name: /run passive assessment/i }),
+    ).toBeDisabled()
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+    expect(props.onRetry).toHaveBeenCalledTimes(1)
+  })
+
+  it('blocks the assessment when the registry returns no sources', () => {
+    renderSources({ sources: [] })
+
+    expect(
+      screen.getByText(/no external sources were returned/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /run passive assessment/i }),
+    ).toBeDisabled()
+    expect(
+      screen.getByLabelText(/i understand these third-party services/i),
+    ).toBeDisabled()
+  })
+
+  it('shows an assessment failure with a retry that preserves consent', () => {
+    const props = renderSources({
+      consentConfirmed: true,
+      error: {
+        message: 'The assessment backend failed.',
+        context: 'assessment',
+        status: 500,
+        retryAfterSeconds: null,
+      },
+    })
+
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /assessment could not be completed/i,
+    )
+    expect(
+      screen.getByLabelText(/i understand these third-party services/i),
+    ).toBeChecked()
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+    expect(props.onRetry).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not show assessment errors while the registry itself is failing', () => {
+    renderSources({
+      sources: [],
+      error: {
+        message: 'Registry failed.',
+        context: 'sources',
+        status: 503,
+        retryAfterSeconds: null,
+      },
+    })
+
+    expect(
+      screen.queryByText(/assessment could not be completed/i),
+    ).not.toBeInTheDocument()
   })
 })

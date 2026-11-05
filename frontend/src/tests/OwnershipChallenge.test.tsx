@@ -2,13 +2,33 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { OwnershipChallenge } from '../components/OwnershipChallenge'
 
+const futureExpiry = () => new Date(Date.now() + 15 * 60 * 1000).toISOString()
+
 const mockChallenge = {
   domain: 'example.com',
   token: 'abc123def456',
   txt_record_name: '_tryfindme-verification.example.com',
   txt_record_value: 'abc123def456.signature',
-  expires_at: '2026-01-01T00:00:00Z',
+  expires_at: futureExpiry(),
   ttl_seconds: 900,
+}
+
+function renderChallenge(
+  overrides: Partial<Parameters<typeof OwnershipChallenge>[0]> = {},
+) {
+  const props = {
+    challenge: mockChallenge,
+    verifying: false,
+    loading: false,
+    error: null,
+    onVerify: vi.fn(),
+    onStartOver: vi.fn(),
+    onRetry: vi.fn(),
+    onRestartVerification: vi.fn(),
+    ...overrides,
+  }
+  render(<OwnershipChallenge {...props} />)
+  return props
 }
 
 describe('OwnershipChallenge', () => {
@@ -16,125 +36,121 @@ describe('OwnershipChallenge', () => {
     vi.clearAllMocks()
   })
 
-  it('renders TXT record name and value', () => {
-    render(
-      <OwnershipChallenge
-        challenge={mockChallenge}
-        onVerify={vi.fn()}
-        onBack={vi.fn()}
-        token=""
-        onTokenChange={vi.fn()}
-        loading={false}
-        error={null}
-      />
-    )
+  it('renders the domain, TXT record name and value', () => {
+    renderChallenge()
 
-    expect(screen.getByText(/prove domain ownership/i)).toBeInTheDocument()
-    expect(screen.getByText(/_tryfindme-verification\.example\.com/)).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: /prove control of example\.com/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(/_tryfindme-verification\.example\.com/),
+    ).toBeInTheDocument()
     expect(screen.getByText(/abc123def456\.signature/)).toBeInTheDocument()
   })
 
-  it('displays the domain being verified', () => {
-    render(
-      <OwnershipChallenge
-        challenge={mockChallenge}
-        onVerify={vi.fn()}
-        onBack={vi.fn()}
-        token=""
-        onTokenChange={vi.fn()}
-        loading={false}
-        error={null}
-      />
-    )
+  it('never asks the user to paste a token manually', () => {
+    renderChallenge()
 
-    const domainTexts = screen.getAllByText(/example\.com/)
-    expect(domainTexts.length).toBeGreaterThan(0)
+    expect(
+      screen.queryByLabelText(/verification token/i),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('textbox'),
+    ).not.toBeInTheDocument()
   })
 
-  it('updates token on input change', () => {
-    const onTokenChange = vi.fn()
-    render(
-      <OwnershipChallenge
-        challenge={mockChallenge}
-        onVerify={vi.fn()}
-        onBack={vi.fn()}
-        token=""
-        onTokenChange={onTokenChange}
-        loading={false}
-        error={null}
-      />
+  it('calls verify using the challenge held in state', () => {
+    const props = renderChallenge()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /published the record/i }),
     )
 
-    const input = screen.getByLabelText(/verification token/i)
-    fireEvent.input(input, { target: { value: 'newtoken' } })
-    expect(onTokenChange).toHaveBeenCalledWith('newtoken')
+    expect(props.onVerify).toHaveBeenCalledTimes(1)
   })
 
-  it('calls onVerify when submit is clicked', () => {
-    const onVerify = vi.fn()
-    render(
-      <OwnershipChallenge
-        challenge={mockChallenge}
-        onVerify={onVerify}
-        onBack={vi.fn()}
-        token="sometoken"
-        onTokenChange={vi.fn()}
-        loading={false}
-        error={null}
-      />
-    )
+  it('offers copy controls for the record name and value', () => {
+    renderChallenge()
 
-    const button = screen.getByRole('button', { name: /verify ownership/i })
-    fireEvent.click(button)
-    expect(onVerify).toHaveBeenCalledTimes(1)
+    expect(
+      screen.getByRole('button', { name: /copy record name/i }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /copy record value/i }),
+    ).toBeInTheDocument()
   })
 
-  it('disables verify button when loading', () => {
-    render(
-      <OwnershipChallenge
-        challenge={mockChallenge}
-        onVerify={vi.fn()}
-        onBack={vi.fn()}
-        token="sometoken"
-        onTokenChange={vi.fn()}
-        loading={true}
-        error={null}
-      />
+  it('copies the value to the clipboard and announces it', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    })
+    renderChallenge()
+
+    fireEvent.click(
+      screen.getByRole('button', { name: /copy record value/i }),
     )
 
-    const button = screen.getByRole('button', { name: /verifying/i })
+    expect(await screen.findByText('Copied')).toBeInTheDocument()
+    expect(writeText).toHaveBeenCalledWith('abc123def456.signature')
+  })
+
+  it('disables verification while verifying and shows indeterminate progress', () => {
+    renderChallenge({ verifying: true, loading: true })
+
+    const button = screen.getByRole('button', { name: /published the record/i })
     expect(button).toBeDisabled()
+    expect(button).toHaveAttribute('aria-busy', 'true')
+    expect(
+      screen.getByRole('progressbar', {
+        name: /querying public dns/i,
+      }),
+    ).toBeInTheDocument()
   })
 
-  it('displays error message when provided', () => {
-    render(
-      <OwnershipChallenge
-        challenge={mockChallenge}
-        onVerify={vi.fn()}
-        onBack={vi.fn()}
-        token=""
-        onTokenChange={vi.fn()}
-        loading={false}
-        error="DNS TXT verification failed"
-      />
-    )
+  it('shows expiry status and blocks verification when expired', () => {
+    renderChallenge({
+      challenge: {
+        ...mockChallenge,
+        expires_at: new Date(Date.now() - 1000).toISOString(),
+      },
+    })
 
-    expect(screen.getByRole('alert')).toHaveTextContent('DNS TXT verification failed')
+    expect(screen.getAllByText(/expired/i).length).toBeGreaterThan(0)
+    expect(
+      screen.getByRole('button', { name: /published the record/i }),
+    ).toBeDisabled()
+    expect(screen.getByText(/challenge expired/i)).toBeInTheDocument()
   })
 
-  it('has a copy button for the TXT value', () => {
-    render(
-      <OwnershipChallenge
-        challenge={mockChallenge}
-        onVerify={vi.fn()}
-        onBack={vi.fn()}
-        token=""
-        onTokenChange={vi.fn()}
-        loading={false}
-        error={null}
-      />
-    )
+  it('keeps the challenge visible when verification fails', () => {
+    const props = renderChallenge({
+      error: {
+        message: 'TXT record not found.',
+        context: 'verify',
+        status: null,
+        retryAfterSeconds: null,
+      },
+    })
 
-    expect(screen.getByRole('button', { name: 'Copy' })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      /ownership verification failed/i,
+    )
+    expect(screen.getByRole('alert')).toHaveTextContent(/txt record not found/i)
+    expect(
+      screen.getByText(/_tryfindme-verification\.example\.com/),
+    ).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+    expect(props.onRetry).toHaveBeenCalledTimes(1)
+  })
+
+  it('lets the user start over from the challenge screen', () => {
+    const props = renderChallenge()
+
+    fireEvent.click(screen.getByRole('button', { name: /start over/i }))
+
+    expect(props.onStartOver).toHaveBeenCalledTimes(1)
   })
 })

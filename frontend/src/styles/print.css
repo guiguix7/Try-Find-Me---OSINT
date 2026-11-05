@@ -1,0 +1,110 @@
+/* Obsidian Grid — report print styles */
+@page {
+    margin: 14mm;
+}
+
+@media print {
+    body {
+        background: #ffffff !important;
+        background-image: none !important;
+        color: #111111 !important;
+    }
+
+    .app-header,
+    .app-footer,
+    .steps,
+    .skip-link,
+    .report-actions,
+    .report-nav,
+    .btn,
+    .copy-field__control button {
+        display: none !important;
+    }
+
+    .workspace {
+        max-width: none;
+        padding: 0;
+    }
+
+    .report {
+        max-width: none;
+    }
+
+    .panel,
+    .evidence-card,
+    .source-card,
+    .risk-card,
+    .empty-state,
+    .alert,
+    .callout,
+    .code-block {
+        border-color: #cccccc !important;
+        background: #ffffff !important;
+        box-shadow: none !important;
+        color: #111111 !important;
+    }
+
+    .panel__header,
+    .evidence-card__header,
+    .evidence-card__details,
+    .definition-list__row,
+    .data-table th,
+    .data-table td,
+    .module-row {
+        border-color: #dddddd !important;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4,
+    .report-title,
+    .evidence-card__source,
+    .risk-card__label,
+    .empty-state__title,
+    .callout strong {
+        color: #111111 !important;
+    }
+
+    .badge,
+    .status,
+    .chip {
+        border: 1px solid #999999 !important;
+        background: #ffffff !important;
+        color: #111111 !important;
+        box-shadow: none !important;
+    }
+
+    .status__dot {
+        background: #555555 !important;
+        box-shadow: none !important;
+    }
+
+    a {
+        color: #111111 !important;
+        text-decoration: underline !important;
+    }
+
+    .report-section {
+        break-inside: auto;
+    }
+
+    .evidence-card,
+    .risk-card,
+    .source-card {
+        break-inside: avoid;
+    }
+
+    .report-section__header h2,
+    .evidence-card__header {
+        break-after: avoid;
+    }
+
+    .evidence-card__details {
+        display: block;
+    }
+
+    .evidence-card__details > summary {
+        display: none;
+    }
+}
